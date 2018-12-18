@@ -1,0 +1,81 @@
+clc
+clear all
+close all
+
+sensitivity = 0.15 %0-1 incremental (0 - pure black required)
+duration = 600 % Number of loops
+areasize = 4000 % Number of required black pixels to move robot (filters out noise)
+
+% 'webcamlist' in command window to see available cameras
+mycam = webcam(1); % Desired camera in webcamlist index
+% type 'preview(mycam)' in command window to check camera is working
+a = arduino('com5','Mega2560') % Connecting to Arduino
+i = 1
+%%
+preview(mycam)
+shunt = readVoltage(a, 'A5'); 
+if shunt < 3.5
+    for i = 1:duration
+        i;
+        img = snapshot(mycam);
+        imgBW = im2bw(img,sensitivity);
+        imgBW = imcomplement(imgBW);
+        imshow(imgBW);
+        stats = regionprops(imgBW);
+        [y, x] = ndgrid(1:size(imgBW, 1), 1:size(imgBW, 2));
+        centroid = mean([x(logical(imgBW)), y(logical(imgBW))])
+        area = sum(sum(imgBW))
+        if area > areasize
+            % Base Movements
+            if centroid(1) < 200
+                writeDigitalPin(a,'D9',0);
+                writePWMDutyCycle(a,'D6', 0.6);
+            end
+            if centroid(1) > 440
+                writeDigitalPin(a,'D9',1);
+                writePWMDutyCycle(a,'D6', 0.6);
+            end
+            if centroid(1) < 440 && centroid(1) > 200
+                writePWMDutyCycle(a,'D6', 0);
+            end
+
+            % Elbow Movment
+            if centroid(2) < 180
+                writeDigitalPin(a,'D10',1);
+                writePWMDutyCycle(a,'D5', 1);
+            end
+            if centroid(2) > 300
+                writeDigitalPin(a,'D10',0);
+                writePWMDutyCycle(a,'D5', 1);
+            end
+            if centroid(2) > 180 && centroid(2) < 300
+                writePWMDutyCycle(a,'D5', 0);
+            end
+        end
+        if area < areasize
+             writePWMDutyCycle(a,'D6', 0);
+             writePWMDutyCycle(a,'D5', 0);
+        end
+        x1 = 200;
+        y1 = 180:300;
+        x2 = 440;
+        y2 = 180:300;
+        x3 = 200:440;
+        y3 = 180;
+        x4 = 200:440;
+        y4 = 300;
+        hold(imgca,'on')
+        plot(imgca,x1, y1, '--.b', 'markers',5)
+        plot(imgca,x2, y2, '--.b', 'markers',5)
+        plot(imgca,x3, y3, '--.b', 'markers',5)
+        plot(imgca,x4, y4, '--.b', 'markers',5)
+        plot(imgca,centroid(:,1), centroid(:,2), 'r*','markers',25)
+        hold(imgca,'off')
+    end
+end
+
+%Stop Base
+writePWMDutyCycle(a,'D6', 0);
+
+% Stop Elbow
+writePWMDutyCycle(a,'D5', 0);
